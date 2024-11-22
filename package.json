@@ -1,17 +1,22 @@
 {
-  "name": "api-recuver",
+  "name": "api-receiver",
   "version": "1.0.0",
   "main": "APIrecuver.js",
   "scripts": {
-    "start": "node APIrecuver.js"
+    "start": "node APIrecuver.js",
+    "dev": "nodemon APIrecuver.js"
   },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
   "dependencies": {
     "express": "^4.17.1",
     "web3": "^1.9.0",
-    "ws": "^8.2.3"
+    "ws": "^8.2.3",
+    "cors": "^2.8.5"
   },
   "engines": {
     "node": ">=18.0.0"
   }
 }
-
