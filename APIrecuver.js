@@ -3,17 +3,21 @@ const Web3 = require('web3');
 const WebSocket = require('ws');
 const app = express();
 const port = 3000;
-const enable = true;
+
 // Configuração do CORS para WebSocket
 const wss = new WebSocket.Server({ 
-    port: 8080,
+    server: app,
     perMessageDeflate: false,
     clientTracking: true,
     maxPayload: 50 * 1024 * 1024,
     verifyClient: (info, callback) => {
-        // Permitir conexões do Netlify
         const origin = info.origin;
-        const allow = origin.includes('netlify.app') || origin.includes('localhost');
+        const allowedOrigins = [
+            'https://paymentramceo.netlify.app',
+            'http://localhost:3000',
+            'http://localhost:8080'
+        ];
+        const allow = allowedOrigins.includes(origin) || !origin;
         callback(allow, 200, 'Origem não permitida');
     }
 });
