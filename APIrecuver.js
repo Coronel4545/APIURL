@@ -3,7 +3,7 @@ const Web3 = require('web3');
 const WebSocket = require('ws');
 const app = express();
 const port = 3000;
-
+const enable = true;
 // Configuração do CORS para WebSocket
 const wss = new WebSocket.Server({ 
     port: 8080,
