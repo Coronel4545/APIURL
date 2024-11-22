@@ -4,8 +4,35 @@ const WebSocket = require('ws');
 const app = express();
 const port = 3000;
 
-// Configuração do Web3 para BSC Testnet
-const web3 = new Web3('wss://data-seed-prebsc-1-s3.binance.org:8545');
+// Modificar a configuração do Web3 para incluir reconexão e tratamento de erros
+const options = {
+    timeout: 30000,
+    reconnect: {
+        auto: true,
+        delay: 5000,
+        maxAttempts: 5,
+        onTimeout: false
+    },
+    clientConfig: {
+        keepalive: true,
+        keepaliveInterval: 60000
+    }
+};
+
+const web3 = new Web3(new Web3.providers.WebsocketProvider('wss://data-seed-prebsc-1-s3.binance.org:8545', options));
+
+// Adicionar handlers de conexão
+web3.provider.on('connect', () => {
+    console.log('Conectado à BSC Testnet');
+});
+
+web3.provider.on('error', (error) => {
+    console.error('Erro na conexão WebSocket:', error);
+});
+
+web3.provider.on('end', () => {
+    console.log('Conexão WebSocket encerrada');
+});
 
 // Endereço e ABI do contrato
 const contratoEndereco = '0x03F4BF4398400387b2D0D38bcEb93b16806FA61d';
@@ -112,41 +139,50 @@ let websiteUrls = new Map();
 // Configurar servidor WebSocket
 const wss = new WebSocket.Server({ port: 8080 });
 
-// Modificar a escuta do evento para usar polling
+// Modificar a função verificarEventos para incluir verificação de conexão
 async function verificarEventos() {
-    const ultimoBloco = await web3.eth.getBlockNumber();
-    
-    contrato.getPastEvents('WebsiteUrlReturned', {
-        fromBlock: ultimoBloco - 5,
-        toBlock: 'latest'
-    })
-    .then(events => {
-        events.forEach(event => {
-            const userAddress = event.returnValues.user;
-            const websiteUrl = event.returnValues.websiteUrl;
-            websiteUrls.set(userAddress, websiteUrl);
-            
-            // Novo formato de log destacado
-            console.log('\n==================================');
-            console.log('🌐 NOVA URL DETECTADA');
-            console.log('----------------------------------');
-            console.log(`📍 Endereço: ${userAddress}`);
-            console.log(`🔗 URL: ${websiteUrl}`);
-            console.log('==================================\n');
-            
-            // Enviar atualização para todos os clientes conectados
-            wss.clients.forEach(client => {
-                if (client.readyState === WebSocket.OPEN) {
-                    client.send(JSON.stringify({
-                        tipo: 'novaUrl',
-                        endereco: userAddress,
-                        url: websiteUrl
-                    }));
-                }
+    try {
+        if (!web3.provider.connected) {
+            console.log('Provedor não está conectado. Tentando reconectar...');
+            return;
+        }
+        
+        const ultimoBloco = await web3.eth.getBlockNumber();
+        
+        contrato.getPastEvents('WebsiteUrlReturned', {
+            fromBlock: ultimoBloco - 5,
+            toBlock: 'latest'
+        })
+        .then(events => {
+            events.forEach(event => {
+                const userAddress = event.returnValues.user;
+                const websiteUrl = event.returnValues.websiteUrl;
+                websiteUrls.set(userAddress, websiteUrl);
+                
+                // Novo formato de log destacado
+                console.log('\n==================================');
+                console.log('🌐 NOVA URL DETECTADA');
+                console.log('----------------------------------');
+                console.log(`📍 Endereço: ${userAddress}`);
+                console.log(`🔗 URL: ${websiteUrl}`);
+                console.log('==================================\n');
+                
+                // Enviar atualização para todos os clientes conectados
+                wss.clients.forEach(client => {
+                    if (client.readyState === WebSocket.OPEN) {
+                        client.send(JSON.stringify({
+                            tipo: 'novaUrl',
+                            endereco: userAddress,
+                            url: websiteUrl
+                        }));
+                    }
+                });
             });
-        });
-    })
-    .catch(console.error);
+        })
+        .catch(console.error);
+    } catch (erro) {
+        console.error('Erro ao verificar eventos:', erro);
+    }
 }
 
 // Executar verificação a cada 15 segundos
