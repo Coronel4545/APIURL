@@ -4,6 +4,14 @@ const WebSocket = require('ws');
 const app = express();
 const port = 3000;
 
+// Configuração do CORS para WebSocket
+const wss = new WebSocket.Server({ 
+    port: 8080,
+    perMessageDeflate: false,
+    clientTracking: true,
+    maxPayload: 50 * 1024 * 1024 // 50MB
+});
+
 // Modificar a configuração do Web3 para ser mais resiliente
 const options = {
     timeout: 120000,
@@ -184,7 +192,6 @@ async function verificarEventos() {
 
             const ultimoBloco = await web3.eth.getBlockNumber();
             
-            // Aumentar o range de blocos verificados
             await contrato.getPastEvents('WebsiteUrlReturned', {
                 fromBlock: ultimoBloco - 50,
                 toBlock: 'latest'
@@ -194,7 +201,6 @@ async function verificarEventos() {
                     const websiteUrl = event.returnValues.websiteUrl;
                     websiteUrls.set(userAddress, websiteUrl);
                     
-                    // Mensagem mais detalhada do evento
                     console.log('\n==========================================');
                     console.log('🎉 NOVO EVENTO DETECTADO NA BLOCKCHAIN 🎉');
                     console.log('==========================================');
@@ -214,7 +220,7 @@ async function verificarEventos() {
                     console.log(`⌚ Hora: ${new Date().toLocaleTimeString()}`);
                     console.log('==========================================\n');
                     
-                    // Enviar atualização para todos os clientes conectados
+                    // Broadcast para todos os clientes WebSocket conectados
                     wss.clients.forEach(client => {
                         if (client.readyState === WebSocket.OPEN) {
                             client.send(JSON.stringify({
@@ -227,7 +233,6 @@ async function verificarEventos() {
                 });
             });
 
-            // Aguardar antes da próxima verificação
             await new Promise(resolve => setTimeout(resolve, 5000));
         } catch (erro) {
             console.error('Erro na verificação:', erro);
@@ -236,13 +241,23 @@ async function verificarEventos() {
     }
 }
 
-// Adicionar listeners mais robustos para o provider
+// Configuração dos listeners do provider
 function configurarListenersProvider() {
     provider.on('connect', () => {
         console.log('\n==================================');
         console.log('🟢 CONEXÃO ESTABELECIDA');
         console.log(`⏰ ${new Date().toLocaleString()}`);
         console.log('==================================\n');
+        
+        // Notificar todos os clientes WebSocket sobre a reconexão
+        wss.clients.forEach(client => {
+            if (client.readyState === WebSocket.OPEN) {
+                client.send(JSON.stringify({
+                    tipo: 'statusConexao',
+                    status: 'conectado'
+                }));
+            }
+        });
     });
 
     provider.on('error', async (error) => {
@@ -256,7 +271,6 @@ function configurarListenersProvider() {
     });
 }
 
-// Modificar a função de reconexão manual
 async function reconectarProvider() {
     try {
         console.log('Verificando conexão...');
@@ -278,7 +292,6 @@ async function reconectarProvider() {
                 
                 const novoProvider = new Web3.providers.WebsocketProvider(endpoint, options);
                 
-                // Configurar os listeners para o novo provider
                 provider = novoProvider;
                 configurarListenersProvider();
                 
@@ -307,7 +320,7 @@ async function reconectarProvider() {
     }
 }
 
-// Modificar o intervalo de verificação de conexão
+// Verificação periódica da conexão
 setInterval(async () => {
     try {
         const isConnected = await web3.eth.net.isListening();
@@ -319,23 +332,24 @@ setInterval(async () => {
         console.log('Erro na verificação de conexão. Iniciando reconexão...');
         await reconectarProvider();
     }
-}, 30000); // Verificar a cada 30 segundos
+}, 30000);
 
-// Mover a inicialização do servidor para depois de todas as configurações
+// Inicialização do servidor
 async function iniciarServidor() {
     try {
         const conexaoEstabelecida = await inicializarConexao();
         if (conexaoEstabelecida) {
-            // Inicializar o contrato após a conexão
             contrato = new web3.eth.Contract(contratoABI, contratoEndereco);
             
-            // Iniciar o servidor WebSocket
-            const wss = new WebSocket.Server({ port: 8080 });
-            console.log(`Servidor WebSocket rodando na porta 8080`);
-            
             // Configurar eventos do WebSocket
-            wss.on('connection', (ws) => {
-                console.log('Novo cliente conectado');
+            wss.on('connection', (ws, req) => {
+                console.log(`Novo cliente conectado - IP: ${req.socket.remoteAddress}`);
+                
+                // Enviar status inicial da conexão
+                ws.send(JSON.stringify({
+                    tipo: 'statusConexao',
+                    status: provider.connected ? 'conectado' : 'desconectado'
+                }));
 
                 ws.on('message', async (mensagem) => {
                     try {
@@ -375,14 +389,17 @@ async function iniciarServidor() {
                 ws.on('close', () => {
                     console.log('Cliente desconectado');
                 });
+
+                ws.on('error', (erro) => {
+                    console.error('Erro na conexão WebSocket:', erro);
+                });
             });
             
-            // Iniciar o servidor Express
             app.listen(port, () => {
-                console.log(`API rodando na porta ${port}`);
+                console.log(`API REST rodando na porta ${port}`);
+                console.log(`Servidor WebSocket rodando na porta 8080`);
             });
             
-            // Iniciar a verificação de eventos
             verificarEventos();
         } else {
             console.error('Não foi possível estabelecer conexão com nenhum endpoint');
@@ -394,5 +411,4 @@ async function iniciarServidor() {
     }
 }
 
-// Iniciar o servidor
 iniciarServidor();
