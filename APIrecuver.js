@@ -3,6 +3,10 @@ const WebSocket = require('ws');
 const cors = require('cors');
 const app = express();
 
+// Usar as variáveis de ambiente configuradas no Render
+const PORT = process.env.PORT || 3000;
+const WS_PORT = process.env.WS_PORT || 8080;
+
 // Configurar CORS
 app.use(cors({
     origin: '*',
@@ -10,13 +14,12 @@ app.use(cors({
     allowedHeaders: ['Content-Type']
 }));
 
-// Criar servidor HTTP primeiro
+// Criar servidor HTTP
 const server = require('http').createServer(app);
 
-// Configurar WebSocket anexado ao servidor HTTP
+// Configurar WebSocket Server separado na porta WS_PORT
 const wss = new WebSocket.Server({ 
-    server: server,
-    path: "/", // Caminho raiz
+    port: WS_PORT, // Usar a porta específica para WebSocket
     perMessageDeflate: false,
     clientTracking: true,
     maxPayload: 50 * 1024 * 1024
@@ -28,12 +31,20 @@ wss.on('connection', (ws, req) => {
     console.log(`Origin: ${req.headers.origin}`);
     
     // Enviar mensagem de confirmação
-    ws.send(JSON.stringify({ tipo: 'conexao', status: 'conectado' }));
+    ws.send(JSON.stringify({ 
+        tipo: 'conexao', 
+        status: 'conectado',
+        message: 'Conexão WebSocket estabelecida com sucesso'
+    }));
 
     ws.on('message', (message) => {
         console.log('Mensagem recebida:', message.toString());
-        // Eco da mensagem para teste
-        ws.send(message);
+        try {
+            // Eco da mensagem para teste
+            ws.send(message);
+        } catch (error) {
+            console.error('Erro ao enviar mensagem:', error);
+        }
     });
 
     ws.on('error', (error) => {
@@ -45,9 +56,29 @@ wss.on('connection', (ws, req) => {
     });
 });
 
-// Iniciar servidor na porta correta
-const PORT = process.env.PORT || 3000;
+// Adicionar rota de teste para API HTTP
+app.get('/', (req, res) => {
+    res.json({ 
+        status: 'online',
+        message: 'Servidor API está rodando',
+        httpPort: PORT,
+        wsPort: WS_PORT
+    });
+});
+
+// Iniciar servidores
 server.listen(PORT, () => {
-    console.log(`Servidor rodando na porta ${PORT}`);
-    console.log(`WebSocket pronto para conexões`);
+    console.log('=================================');
+    console.log(`🚀 Servidor HTTP rodando na porta ${PORT}`);
+    console.log(`🔌 WebSocket rodando na porta ${WS_PORT}`);
+    console.log('=================================');
+});
+
+// Verificar status do WebSocket Server
+wss.on('listening', () => {
+    console.log(`WebSocket Server está ouvindo na porta ${WS_PORT}`);
+});
+
+wss.on('error', (error) => {
+    console.error('Erro no servidor WebSocket:', error);
 });
