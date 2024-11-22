@@ -4,18 +4,18 @@ const WebSocket = require('ws');
 const app = express();
 const port = 3000;
 
-// Modificar a configuração do Web3 para incluir reconexão e tratamento de erros
+// Modificar a configuração do Web3 para ser mais resiliente
 const options = {
-    timeout: 60000,
+    timeout: 30000,
     reconnect: {
         auto: true,
-        delay: 2500,
-        maxAttempts: 50,
-        onTimeout: true
+        delay: 5000,
+        maxAttempts: 5,
+        onTimeout: false
     },
     clientConfig: {
         keepalive: true,
-        keepaliveInterval: 60000,
+        keepaliveInterval: 30000,
         maxReceivedFrameSize: 100000000,
         maxReceivedMessageSize: 100000000
     }
@@ -27,11 +27,20 @@ const web3 = new Web3(provider);
 
 // Substituir os event listeners do provider
 provider.on('connect', () => {
-    console.log('Conectado à BSC Testnet');
+    console.log('\n==================================');
+    console.log('🟢 CONEXÃO ESTABELECIDA');
+    console.log('----------------------------------');
+    console.log('✅ Conectado com sucesso à BSC Testnet');
+    console.log(`⏰ ${new Date().toLocaleString()}`);
+    console.log('==================================\n');
 });
 
 provider.on('error', (error) => {
-    console.error('Erro na conexão WebSocket:', error);
+    console.error('\n==================================');
+    console.error('🔴 CONEXÃO PERDIDA');
+    console.error('----------------------------------');
+    console.error('❌ Erro na conexão WebSocket:', error);
+    console.error('==================================\n');
 });
 
 provider.on('end', () => {
@@ -201,47 +210,74 @@ async function verificarEventos() {
 // Executar verificação a cada 15 segundos
 setInterval(verificarEventos, 15000);
 
-// Adicionar função de reconexão manual
+// Modificar a função de reconexão manual
 async function reconectarProvider() {
     try {
-        if (provider.connected) {
-            const isListening = await web3.eth.net.isListening().catch(() => false);
-            if (isListening) return;
-        }
+        console.log('Verificando conexão...');
         
-        console.log('Tentando reconexão manual...');
-        
-        // Tentar diferentes endpoints da BSC testnet
         const endpoints = [
-            'wss://data-seed-prebsc-1-s3.binance.org:8545',
-            'wss://data-seed-prebsc-2-s1.binance.org:8545',
+            'wss://bsc-testnet.publicnode.com',        // Endpoint alternativo 1
+            'wss://bsc-testnet.nodereal.io/ws/v1/',    // Endpoint alternativo 2
             'wss://data-seed-prebsc-1-s1.binance.org:8545',
-            'wss://data-seed-prebsc-1-s2.binance.org:8545'
+            'wss://data-seed-prebsc-2-s1.binance.org:8545'
         ];
         
         for (const endpoint of endpoints) {
             try {
-                provider.disconnect();
+                console.log(`Tentando conectar a: ${endpoint}`);
+                
+                if (provider.connected) {
+                    provider.disconnect();
+                }
+                
                 const novoProvider = new Web3.providers.WebsocketProvider(endpoint, options);
+                
+                // Aguardar um momento para estabelecer a conexão
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                
                 web3.setProvider(novoProvider);
                 
                 const isConnected = await web3.eth.net.isListening();
                 if (isConnected) {
-                    console.log(`Reconectado com sucesso ao endpoint: ${endpoint}`);
-                    return;
+                    console.log('\n==================================');
+                    console.log('🔄 RECONEXÃO BEM-SUCEDIDA');
+                    console.log('----------------------------------');
+                    console.log(`✅ Nova conexão estabelecida em: ${endpoint}`);
+                    console.log(`⏰ ${new Date().toLocaleString()}`);
+                    console.log('==================================\n');
+                    provider = novoProvider;
+                    
+                    // Reconfigurar os event listeners
+                    provider.on('connect', () => console.log('Reconectado à BSC Testnet'));
+                    provider.on('error', (error) => console.error('Erro na conexão:', error));
+                    provider.on('end', () => console.log('Conexão encerrada'));
+                    
+                    return true;
                 }
             } catch (err) {
-                console.log(`Falha ao conectar com ${endpoint}, tentando próximo...`);
+                console.log(`❌ Falha ao conectar com ${endpoint}: ${err.message}`);
             }
         }
-        throw new Error('Falha ao conectar com todos os endpoints');
+        return false;
     } catch (erro) {
-        console.error('Falha na reconexão manual:', erro);
+        console.error('Erro na reconexão:', erro);
+        return false;
     }
 }
 
-// Modificar o intervalo de reconexão
-setInterval(reconectarProvider, 10000);
+// Modificar o intervalo de verificação de conexão
+setInterval(async () => {
+    try {
+        const isConnected = await web3.eth.net.isListening();
+        if (!isConnected) {
+            console.log('Conexão perdida. Iniciando reconexão...');
+            await reconectarProvider();
+        }
+    } catch (erro) {
+        console.log('Erro na verificação de conexão. Iniciando reconexão...');
+        await reconectarProvider();
+    }
+}, 30000); // Verificar a cada 30 segundos
 
 // Gerenciar conexões WebSocket
 wss.on('connection', (ws) => {
