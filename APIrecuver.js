@@ -21,30 +21,59 @@ const options = {
     }
 };
 
-// Modificar a inicialização do Web3 e adicionar verificação de conexão
-const provider = new Web3.providers.WebsocketProvider('wss://data-seed-prebsc-1-s3.binance.org:8545', options);
-const web3 = new Web3('https://data-seed-prebsc-1-s1.binance.org:8545');
+// Modificar a inicialização do Web3 e provider
+let provider;
+let web3;
 
-// Substituir os event listeners do provider
-provider.on('connect', () => {
-    console.log('\n==================================');
-    console.log('🟢 CONEXÃO ESTABELECIDA');
-    console.log('----------------------------------');
-    console.log('✅ Conectado com sucesso à BSC Testnet');
-    console.log(`⏰ ${new Date().toLocaleString()}`);
-    console.log('==================================\n');
-});
+async function inicializarConexao() {
+    const endpoints = [
+        'wss://bsc-testnet.publicnode.com',
+        'wss://bsc-testnet.nodereal.io/ws/v1/',
+        'wss://data-seed-prebsc-1-s1.binance.org:8545',
+        'wss://data-seed-prebsc-2-s1.binance.org:8545'
+    ];
 
-provider.on('error', (error) => {
-    console.error('\n==================================');
-    console.error('🔴 CONEXÃO PERDIDA');
-    console.error('----------------------------------');
-    console.error('❌ Erro na conexão WebSocket:', error);
-    console.error('==================================\n');
-});
+    for (const endpoint of endpoints) {
+        try {
+            console.log(`Tentando conectar a: ${endpoint}`);
+            provider = new Web3.providers.WebsocketProvider(endpoint, options);
+            web3 = new Web3(provider);
 
-provider.on('end', () => {
-    console.log('Conexão WebSocket encerrada');
+            // Aguardar estabelecimento da conexão
+            await new Promise(resolve => setTimeout(resolve, 3000));
+
+            const isConnected = await web3.eth.net.isListening();
+            if (isConnected) {
+                console.log('\n==================================');
+                console.log('🟢 CONEXÃO INICIAL ESTABELECIDA');
+                console.log('----------------------------------');
+                console.log(`✅ Conectado com sucesso em: ${endpoint}`);
+                console.log(`⏰ ${new Date().toLocaleString()}`);
+                console.log('==================================\n');
+                return true;
+            }
+        } catch (err) {
+            console.log(`❌ Falha ao conectar com ${endpoint}: ${err.message}`);
+        }
+    }
+    return false;
+}
+
+// Modificar o listen do app para usar a nova função de inicialização
+app.listen(port, async () => {
+    try {
+        const conexaoEstabelecida = await inicializarConexao();
+        if (conexaoEstabelecida) {
+            console.log(`Servidor WebSocket rodando na porta 8080`);
+            console.log(`API rodando na porta ${port}`);
+        } else {
+            console.error('Não foi possível estabelecer conexão com nenhum endpoint');
+            process.exit(1);
+        }
+    } catch (erro) {
+        console.error('Erro ao inicializar a aplicação:', erro);
+        process.exit(1);
+    }
 });
 
 // Endereço e ABI do contrato
@@ -321,17 +350,4 @@ wss.on('connection', (ws) => {
     ws.on('close', () => {
         console.log('Cliente desconectado');
     });
-});
-
-app.listen(port, async () => {
-    try {
-        // Verificar se está conectado à rede
-        await web3.eth.net.isListening();
-        console.log(`Conectado à rede BSC Testnet`);
-        console.log(`Servidor WebSocket rodando na porta 8080`);
-        console.log(`API rodando na porta ${port}`);
-    } catch (erro) {
-        console.error('Erro ao conectar à rede BSC:', erro);
-        process.exit(1);
-    }
 });
