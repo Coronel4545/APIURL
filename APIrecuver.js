@@ -10,12 +10,12 @@ const options = {
     reconnect: {
         auto: true,
         delay: 5000,
-        maxAttempts: 5,
+        maxAttempts: 20,
         onTimeout: false
     },
     clientConfig: {
         keepalive: true,
-        keepaliveInterval: 60000
+        keepaliveInterval: 30000
     }
 };
 
@@ -141,11 +141,18 @@ let websiteUrls = new Map();
 // Configurar servidor WebSocket
 const wss = new WebSocket.Server({ port: 8080 });
 
-// Modificar a função verificarEventos para incluir verificação de conexão
+// Modificar a função verificarEventos para melhor tratamento de conexão
 async function verificarEventos() {
     try {
-        if (!web3.provider.connected) {
-            console.log('Provedor não está conectado. Tentando reconectar...');
+        // Verificar conexão de forma mais robusta
+        if (!provider.connected) {
+            console.log('Provedor não está conectado. Aguardando reconexão...');
+            return;
+        }
+
+        const isListening = await web3.eth.net.isListening().catch(() => false);
+        if (!isListening) {
+            console.log('Não está escutando a rede. Aguardando reconexão...');
             return;
         }
         
@@ -184,11 +191,34 @@ async function verificarEventos() {
         .catch(console.error);
     } catch (erro) {
         console.error('Erro ao verificar eventos:', erro);
+        // Aguardar 5 segundos antes da próxima tentativa
+        await new Promise(resolve => setTimeout(resolve, 5000));
     }
 }
 
 // Executar verificação a cada 15 segundos
 setInterval(verificarEventos, 15000);
+
+// Adicionar função de reconexão manual
+async function reconectarProvider() {
+    try {
+        if (provider.connected) return;
+        
+        console.log('Tentando reconexão manual...');
+        provider.disconnect();
+        
+        const novoProvider = new Web3.providers.WebsocketProvider('wss://data-seed-prebsc-1-s3.binance.org:8545', options);
+        web3.setProvider(novoProvider);
+        
+        await web3.eth.net.isListening();
+        console.log('Reconectado com sucesso!');
+    } catch (erro) {
+        console.error('Falha na reconexão manual:', erro);
+    }
+}
+
+// Adicionar verificação periódica de conexão
+setInterval(reconectarProvider, 30000);
 
 // Gerenciar conexões WebSocket
 wss.on('connection', (ws) => {
