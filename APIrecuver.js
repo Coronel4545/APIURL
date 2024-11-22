@@ -6,16 +6,16 @@ const port = 3000;
 
 // Modificar a configuração do Web3 para ser mais resiliente
 const options = {
-    timeout: 30000,
+    timeout: 60000,
     reconnect: {
         auto: true,
-        delay: 5000,
-        maxAttempts: 5,
-        onTimeout: false
+        delay: 2500,
+        maxAttempts: Infinity,
+        onTimeout: true
     },
     clientConfig: {
         keepalive: true,
-        keepaliveInterval: 30000,
+        keepaliveInterval: 15000,
         maxReceivedFrameSize: 100000000,
         maxReceivedMessageSize: 100000000
     }
@@ -38,6 +38,9 @@ async function inicializarConexao() {
             console.log(`Tentando conectar a: ${endpoint}`);
             provider = new Web3.providers.WebsocketProvider(endpoint, options);
             web3 = new Web3(provider);
+
+            // Configurar os listeners logo após criar o provider
+            configurarListenersProvider();
 
             // Aguardar estabelecimento da conexão
             await new Promise(resolve => setTimeout(resolve, 3000));
@@ -183,61 +186,85 @@ const wss = new WebSocket.Server({ port: 8080 });
 
 // Modificar a função verificarEventos para melhor tratamento de conexão
 async function verificarEventos() {
-    try {
-        // Verificar conexão de forma mais robusta
-        if (!provider.connected) {
-            console.log('Provedor não está conectado. Aguardando reconexão...');
-            return;
-        }
+    while (true) {
+        try {
+            if (!provider.connected) {
+                console.log('Provedor desconectado. Tentando reconexão...');
+                await reconectarProvider();
+                continue;
+            }
 
-        const isListening = await web3.eth.net.isListening().catch(() => false);
-        if (!isListening) {
-            console.log('Não está escutando a rede. Aguardando reconexão...');
-            return;
-        }
-        
-        const ultimoBloco = await web3.eth.getBlockNumber();
-        
-        contrato.getPastEvents('WebsiteUrlReturned', {
-            fromBlock: ultimoBloco - 5,
-            toBlock: 'latest'
-        })
-        .then(events => {
-            events.forEach(event => {
-                const userAddress = event.returnValues.user;
-                const websiteUrl = event.returnValues.websiteUrl;
-                websiteUrls.set(userAddress, websiteUrl);
-                
-                // Novo formato de log destacado
-                console.log('\n==================================');
-                console.log('🌐 NOVA URL DETECTADA');
-                console.log('----------------------------------');
-                console.log(`📍 Endereço: ${userAddress}`);
-                console.log(`🔗 URL: ${websiteUrl}`);
-                console.log('==================================\n');
-                
-                // Enviar atualização para todos os clientes conectados
-                wss.clients.forEach(client => {
-                    if (client.readyState === WebSocket.OPEN) {
-                        client.send(JSON.stringify({
-                            tipo: 'novaUrl',
-                            endereco: userAddress,
-                            url: websiteUrl
-                        }));
-                    }
+            const isListening = await web3.eth.net.isListening().catch(() => false);
+            if (!isListening) {
+                console.log('Conexão perdida. Iniciando reconexão...');
+                await reconectarProvider();
+                continue;
+            }
+
+            const ultimoBloco = await web3.eth.getBlockNumber();
+            
+            // Aumentar o range de blocos verificados
+            await contrato.getPastEvents('WebsiteUrlReturned', {
+                fromBlock: ultimoBloco - 50,
+                toBlock: 'latest'
+            }).then(events => {
+                events.forEach(event => {
+                    const userAddress = event.returnValues.user;
+                    const websiteUrl = event.returnValues.websiteUrl;
+                    websiteUrls.set(userAddress, websiteUrl);
+                    
+                    // Novo formato de log destacado
+                    console.log('\n==================================');
+                    console.log('🌐 NOVA URL DETECTADA');
+                    console.log('----------------------------------');
+                    console.log(`📍 Endereço: ${userAddress}`);
+                    console.log(`🔗 URL: ${websiteUrl}`);
+                    console.log('==================================\n');
+                    
+                    // Enviar atualização para todos os clientes conectados
+                    wss.clients.forEach(client => {
+                        if (client.readyState === WebSocket.OPEN) {
+                            client.send(JSON.stringify({
+                                tipo: 'novaUrl',
+                                endereco: userAddress,
+                                url: websiteUrl
+                            }));
+                        }
+                    });
                 });
             });
-        })
-        .catch(console.error);
-    } catch (erro) {
-        console.error('Erro ao verificar eventos:', erro);
-        // Aguardar 5 segundos antes da próxima tentativa
-        await new Promise(resolve => setTimeout(resolve, 5000));
+
+            // Aguardar antes da próxima verificação
+            await new Promise(resolve => setTimeout(resolve, 5000));
+        } catch (erro) {
+            console.error('Erro na verificação:', erro);
+            await new Promise(resolve => setTimeout(resolve, 2000));
+        }
     }
 }
 
-// Executar verificação a cada 15 segundos
-setInterval(verificarEventos, 15000);
+// Remover o setInterval e iniciar a verificação contínua
+verificarEventos();
+
+// Adicionar listeners mais robustos para o provider
+function configurarListenersProvider() {
+    provider.on('connect', () => {
+        console.log('\n==================================');
+        console.log('🟢 CONEXÃO ESTABELECIDA');
+        console.log(`⏰ ${new Date().toLocaleString()}`);
+        console.log('==================================\n');
+    });
+
+    provider.on('error', async (error) => {
+        console.error('Erro no provider:', error);
+        await reconectarProvider();
+    });
+
+    provider.on('end', async () => {
+        console.log('Conexão finalizada. Reconectando...');
+        await reconectarProvider();
+    });
+}
 
 // Modificar a função de reconexão manual
 async function reconectarProvider() {
@@ -245,8 +272,8 @@ async function reconectarProvider() {
         console.log('Verificando conexão...');
         
         const endpoints = [
-            'wss://bsc-testnet.publicnode.com',        // Endpoint alternativo 1
-            'wss://bsc-testnet.nodereal.io/ws/v1/',    // Endpoint alternativo 2
+            'wss://bsc-testnet.publicnode.com',
+            'wss://bsc-testnet.nodereal.io/ws/v1/',
             'wss://data-seed-prebsc-1-s1.binance.org:8545',
             'wss://data-seed-prebsc-2-s1.binance.org:8545'
         ];
@@ -261,7 +288,10 @@ async function reconectarProvider() {
                 
                 const novoProvider = new Web3.providers.WebsocketProvider(endpoint, options);
                 
-                // Aguardar um momento para estabelecer a conexão
+                // Configurar os listeners para o novo provider
+                provider = novoProvider;
+                configurarListenersProvider();
+                
                 await new Promise(resolve => setTimeout(resolve, 2000));
                 
                 web3.setProvider(novoProvider);
@@ -274,13 +304,6 @@ async function reconectarProvider() {
                     console.log(`✅ Nova conexão estabelecida em: ${endpoint}`);
                     console.log(`⏰ ${new Date().toLocaleString()}`);
                     console.log('==================================\n');
-                    provider = novoProvider;
-                    
-                    // Reconfigurar os event listeners
-                    provider.on('connect', () => console.log('Reconectado à BSC Testnet'));
-                    provider.on('error', (error) => console.error('Erro na conexão:', error));
-                    provider.on('end', () => console.log('Conexão encerrada'));
-                    
                     return true;
                 }
             } catch (err) {
