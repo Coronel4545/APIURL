@@ -1,22 +1,17 @@
 {
-  "name": "apirecuver",
+  "name": "api-recuver",
   "version": "1.0.0",
-  "description": "API para interação com smart contract na BSC Testnet",
   "main": "APIrecuver.js",
   "scripts": {
-    "start": "node APIrecuver.js",
-    "dev": "nodemon APIrecuver.js"
+    "start": "node APIrecuver.js"
   },
   "dependencies": {
-    "express": "^4.18.2",
+    "express": "^4.17.1",
     "web3": "^1.9.0",
-    "ws": "^8.13.0",
-    "nodemon": "^2.0.22"
+    "ws": "^8.2.3"
   },
   "engines": {
-    "node": "18.x"
-  },
-  "author": "",
-  "license": "ISC"
+    "node": ">=18.0.0"
+  }
 }
 
