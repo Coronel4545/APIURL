@@ -9,7 +9,13 @@ const wss = new WebSocket.Server({
     port: 8080,
     perMessageDeflate: false,
     clientTracking: true,
-    maxPayload: 50 * 1024 * 1024 // 50MB
+    maxPayload: 50 * 1024 * 1024,
+    verifyClient: (info, callback) => {
+        // Permitir conexões do Netlify
+        const origin = info.origin;
+        const allow = origin.includes('netlify.app') || origin.includes('localhost');
+        callback(allow, 200, 'Origem não permitida');
+    }
 });
 
 // Modificar a configuração do Web3 para ser mais resiliente
