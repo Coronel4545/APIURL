@@ -19,18 +19,20 @@ const options = {
     }
 };
 
-const web3 = new Web3(new Web3.providers.WebsocketProvider('wss://data-seed-prebsc-1-s3.binance.org:8545', options));
+// Modificar a inicialização do Web3 e adicionar verificação de conexão
+const provider = new Web3.providers.WebsocketProvider('wss://data-seed-prebsc-1-s3.binance.org:8545', options);
+const web3 = new Web3(provider);
 
-// Adicionar handlers de conexão
-web3.provider.on('connect', () => {
+// Substituir os event listeners do provider
+provider.on('connect', () => {
     console.log('Conectado à BSC Testnet');
 });
 
-web3.provider.on('error', (error) => {
+provider.on('error', (error) => {
     console.error('Erro na conexão WebSocket:', error);
 });
 
-web3.provider.on('end', () => {
+provider.on('end', () => {
     console.log('Conexão WebSocket encerrada');
 });
 
@@ -232,7 +234,15 @@ wss.on('connection', (ws) => {
     });
 });
 
-app.listen(port, () => {
-    console.log(`Servidor WebSocket rodando na porta 8080`);
-    console.log(`API rodando na porta ${port}`);
+app.listen(port, async () => {
+    try {
+        // Verificar se está conectado à rede
+        await web3.eth.net.isListening();
+        console.log(`Conectado à rede BSC Testnet`);
+        console.log(`Servidor WebSocket rodando na porta 8080`);
+        console.log(`API rodando na porta ${port}`);
+    } catch (erro) {
+        console.error('Erro ao conectar à rede BSC:', erro);
+        process.exit(1);
+    }
 });
