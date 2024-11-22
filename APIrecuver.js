@@ -3,7 +3,7 @@ const Web3 = require('web3');
 const WebSocket = require('ws');
 const app = express();
 const port = 3000;
-
+const reat = true;
 // Modificar a configuração do Web3 para ser mais resiliente
 const options = {
     timeout: 120000,
