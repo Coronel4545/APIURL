@@ -4,6 +4,14 @@ const WebSocket = require('ws');
 const app = express();
 const port = 3000;
 
+// Adicionar no início do arquivo, após os requires
+app.use((req, res, next) => {
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Content-Type');
+    next();
+});
+
 // Configuração do CORS para WebSocket
 const wss = new WebSocket.Server({ 
     server: app,
@@ -227,7 +235,7 @@ async function verificarEventos() {
                     console.log('\n⏰ TIMESTAMP:');
                     console.log('------------------------------------------');
                     console.log(`📅 Data: ${new Date().toLocaleDateString()}`);
-                    console.log(`⌚ Hora: ${new Date().toLocaleTimeString()}`);
+                    console.log(` Hora: ${new Date().toLocaleTimeString()}`);
                     console.log('==========================================\n');
                     
                     // Broadcast para todos os clientes WebSocket conectados
@@ -353,55 +361,19 @@ async function iniciarServidor() {
             
             // Configurar eventos do WebSocket
             wss.on('connection', (ws, req) => {
-                console.log(`Novo cliente conectado - IP: ${req.socket.remoteAddress}`);
+                console.log(`Nova conexão WebSocket de: ${req.socket.remoteAddress}`);
+                console.log(`Origin: ${req.headers.origin}`);
                 
-                // Enviar status inicial da conexão
-                ws.send(JSON.stringify({
-                    tipo: 'statusConexao',
-                    status: provider.connected ? 'conectado' : 'desconectado'
-                }));
-
-                ws.on('message', async (mensagem) => {
-                    try {
-                        const dados = JSON.parse(mensagem);
-
-                        if (dados.tipo === 'processarPagamento') {
-                            const resultado = await contrato.methods.processPayment().call({
-                                from: dados.enderecoRemetente
-                            });
-
-                            const websiteUrl = websiteUrls.get(dados.enderecoRemetente) || resultado;
-
-                            ws.send(JSON.stringify({
-                                tipo: 'resultadoPagamento',
-                                sucesso: true,
-                                websiteUrl: websiteUrl
-                            }));
-                        } 
-                        else if (dados.tipo === 'consultarSaldo') {
-                            const saldo = await contrato.methods.balanceOf(dados.endereco).call();
-                            
-                            ws.send(JSON.stringify({
-                                tipo: 'resultadoSaldo',
-                                sucesso: true,
-                                saldo: web3.utils.fromWei(saldo, 'ether')
-                            }));
-                        }
-                    } catch (erro) {
-                        ws.send(JSON.stringify({
-                            tipo: 'erro',
-                            sucesso: false,
-                            mensagem: erro.message
-                        }));
-                    }
+                ws.on('message', (message) => {
+                    console.log('Mensagem recebida:', message.toString());
                 });
 
-                ws.on('close', () => {
-                    console.log('Cliente desconectado');
+                ws.on('error', (error) => {
+                    console.error('Erro no WebSocket:', error);
                 });
 
-                ws.on('error', (erro) => {
-                    console.error('Erro na conexão WebSocket:', erro);
+                ws.on('close', (code, reason) => {
+                    console.log(`Conexão fechada. Código: ${code}, Razão: ${reason}`);
                 });
             });
             
