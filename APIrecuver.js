@@ -194,13 +194,25 @@ async function verificarEventos() {
                     const websiteUrl = event.returnValues.websiteUrl;
                     websiteUrls.set(userAddress, websiteUrl);
                     
-                    // Novo formato de log destacado
-                    console.log('\n==================================');
-                    console.log('🌐 NOVA URL DETECTADA');
-                    console.log('----------------------------------');
-                    console.log(`📍 Endereço: ${userAddress}`);
-                    console.log(`🔗 URL: ${websiteUrl}`);
-                    console.log('==================================\n');
+                    // Mensagem mais detalhada do evento
+                    console.log('\n==========================================');
+                    console.log('🎉 NOVO EVENTO DETECTADO NA BLOCKCHAIN 🎉');
+                    console.log('==========================================');
+                    console.log('📝 DETALHES DO EVENTO:');
+                    console.log('------------------------------------------');
+                    console.log(`🔷 Tipo do Evento: WebsiteUrlReturned`);
+                    console.log(`🔷 Bloco: ${event.blockNumber}`);
+                    console.log(`🔷 Hash da Transação: ${event.transactionHash}`);
+                    console.log(`🔷 Endereço do Contrato: ${event.address}`);
+                    console.log('\n📍 DADOS RETORNADOS:');
+                    console.log('------------------------------------------');
+                    console.log(`👤 Endereço do Usuário: ${userAddress}`);
+                    console.log(`🌐 URL do Website: ${websiteUrl}`);
+                    console.log('\n⏰ TIMESTAMP:');
+                    console.log('------------------------------------------');
+                    console.log(`📅 Data: ${new Date().toLocaleDateString()}`);
+                    console.log(`⌚ Hora: ${new Date().toLocaleTimeString()}`);
+                    console.log('==========================================\n');
                     
                     // Enviar atualização para todos os clientes conectados
                     wss.clients.forEach(client => {
