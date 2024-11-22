@@ -63,23 +63,6 @@ async function inicializarConexao() {
     }
 }
 
-// Modificar o listen do app para usar a nova função de inicialização
-app.listen(port, async () => {
-    try {
-        const conexaoEstabelecida = await inicializarConexao();
-        if (conexaoEstabelecida) {
-            console.log(`Servidor WebSocket rodando na porta 8080`);
-            console.log(`API rodando na porta ${port}`);
-        } else {
-            console.error('Não foi possível estabelecer conexão com nenhum endpoint');
-            process.exit(1);
-        }
-    } catch (erro) {
-        console.error('Erro ao inicializar a aplicação:', erro);
-        process.exit(1);
-    }
-});
-
 // Endereço e ABI do contrato
 const contratoEndereco = '0x03F4BF4398400387b2D0D38bcEb93b16806FA61d';
 const contratoABI = [
@@ -177,13 +160,10 @@ const contratoABI = [
 ];
 
 // Instância do contrato
-const contrato = new web3.eth.Contract(contratoABI, contratoEndereco);
+let contrato;
 
 // Armazenar URLs retornadas
 let websiteUrls = new Map();
-
-// Configurar servidor WebSocket
-const wss = new WebSocket.Server({ port: 8080 });
 
 // Modificar a função verificarEventos para melhor tratamento de conexão
 async function verificarEventos() {
@@ -243,9 +223,6 @@ async function verificarEventos() {
         }
     }
 }
-
-// Remover o setInterval e iniciar a verificação contínua
-verificarEventos();
 
 // Adicionar listeners mais robustos para o provider
 function configurarListenersProvider() {
@@ -332,46 +309,78 @@ setInterval(async () => {
     }
 }, 30000); // Verificar a cada 30 segundos
 
-// Gerenciar conexões WebSocket
-wss.on('connection', (ws) => {
-    console.log('Novo cliente conectado');
+// Mover a inicialização do servidor para depois de todas as configurações
+async function iniciarServidor() {
+    try {
+        const conexaoEstabelecida = await inicializarConexao();
+        if (conexaoEstabelecida) {
+            // Inicializar o contrato após a conexão
+            contrato = new web3.eth.Contract(contratoABI, contratoEndereco);
+            
+            // Iniciar o servidor WebSocket
+            const wss = new WebSocket.Server({ port: 8080 });
+            console.log(`Servidor WebSocket rodando na porta 8080`);
+            
+            // Configurar eventos do WebSocket
+            wss.on('connection', (ws) => {
+                console.log('Novo cliente conectado');
 
-    ws.on('message', async (mensagem) => {
-        try {
-            const dados = JSON.parse(mensagem);
+                ws.on('message', async (mensagem) => {
+                    try {
+                        const dados = JSON.parse(mensagem);
 
-            if (dados.tipo === 'processarPagamento') {
-                const resultado = await contrato.methods.processPayment().call({
-                    from: dados.enderecoRemetente
+                        if (dados.tipo === 'processarPagamento') {
+                            const resultado = await contrato.methods.processPayment().call({
+                                from: dados.enderecoRemetente
+                            });
+
+                            const websiteUrl = websiteUrls.get(dados.enderecoRemetente) || resultado;
+
+                            ws.send(JSON.stringify({
+                                tipo: 'resultadoPagamento',
+                                sucesso: true,
+                                websiteUrl: websiteUrl
+                            }));
+                        } 
+                        else if (dados.tipo === 'consultarSaldo') {
+                            const saldo = await contrato.methods.balanceOf(dados.endereco).call();
+                            
+                            ws.send(JSON.stringify({
+                                tipo: 'resultadoSaldo',
+                                sucesso: true,
+                                saldo: web3.utils.fromWei(saldo, 'ether')
+                            }));
+                        }
+                    } catch (erro) {
+                        ws.send(JSON.stringify({
+                            tipo: 'erro',
+                            sucesso: false,
+                            mensagem: erro.message
+                        }));
+                    }
                 });
 
-                const websiteUrl = websiteUrls.get(dados.enderecoRemetente) || resultado;
-
-                ws.send(JSON.stringify({
-                    tipo: 'resultadoPagamento',
-                    sucesso: true,
-                    websiteUrl: websiteUrl
-                }));
-            } 
-            else if (dados.tipo === 'consultarSaldo') {
-                const saldo = await contrato.methods.balanceOf(dados.endereco).call();
-                
-                ws.send(JSON.stringify({
-                    tipo: 'resultadoSaldo',
-                    sucesso: true,
-                    saldo: web3.utils.fromWei(saldo, 'ether')
-                }));
-            }
-        } catch (erro) {
-            ws.send(JSON.stringify({
-                tipo: 'erro',
-                sucesso: false,
-                mensagem: erro.message
-            }));
+                ws.on('close', () => {
+                    console.log('Cliente desconectado');
+                });
+            });
+            
+            // Iniciar o servidor Express
+            app.listen(port, () => {
+                console.log(`API rodando na porta ${port}`);
+            });
+            
+            // Iniciar a verificação de eventos
+            verificarEventos();
+        } else {
+            console.error('Não foi possível estabelecer conexão com nenhum endpoint');
+            process.exit(1);
         }
-    });
+    } catch (erro) {
+        console.error('Erro ao inicializar a aplicação:', erro);
+        process.exit(1);
+    }
+}
 
-    ws.on('close', () => {
-        console.log('Cliente desconectado');
-    });
-});
+// Iniciar o servidor
+iniciarServidor();
