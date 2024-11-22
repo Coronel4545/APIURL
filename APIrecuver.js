@@ -6,18 +6,19 @@ const port = 3000;
 
 // Modificar a configuração do Web3 para ser mais resiliente
 const options = {
-    timeout: 60000,
+    timeout: 120000,
     reconnect: {
         auto: true,
-        delay: 2500,
+        delay: 1000,
         maxAttempts: Infinity,
         onTimeout: true
     },
     clientConfig: {
         keepalive: true,
-        keepaliveInterval: 15000,
+        keepaliveInterval: 10000,
         maxReceivedFrameSize: 100000000,
-        maxReceivedMessageSize: 100000000
+        maxReceivedMessageSize: 100000000,
+        handshakeTimeout: 120000
     }
 };
 
@@ -32,34 +33,34 @@ async function inicializarConexao() {
         'wss://data-seed-prebsc-1-s1.binance.org:8545',
         'wss://data-seed-prebsc-2-s1.binance.org:8545'
     ];
-
-    for (const endpoint of endpoints) {
-        try {
-            console.log(`Tentando conectar a: ${endpoint}`);
-            provider = new Web3.providers.WebsocketProvider(endpoint, options);
-            web3 = new Web3(provider);
-
-            // Configurar os listeners logo após criar o provider
-            configurarListenersProvider();
-
-            // Aguardar estabelecimento da conexão
-            await new Promise(resolve => setTimeout(resolve, 3000));
-
-            const isConnected = await web3.eth.net.isListening();
-            if (isConnected) {
-                console.log('\n==================================');
-                console.log('🟢 CONEXÃO INICIAL ESTABELECIDA');
-                console.log('----------------------------------');
-                console.log(`✅ Conectado com sucesso em: ${endpoint}`);
-                console.log(`⏰ ${new Date().toLocaleString()}`);
-                console.log('==================================\n');
-                return true;
+    
+    while (true) {
+        for (const endpoint of endpoints) {
+            try {
+                console.log(`Tentando conectar a: ${endpoint}`);
+                provider = new Web3.providers.WebsocketProvider(endpoint, options);
+                web3 = new Web3(provider);
+                
+                configurarListenersProvider();
+                
+                await new Promise(resolve => setTimeout(resolve, 5000));
+                
+                const isConnected = await web3.eth.net.isListening();
+                if (isConnected) {
+                    console.log('\n==================================');
+                    console.log('🟢 CONEXÃO INICIAL ESTABELECIDA');
+                    console.log(`✅ Conectado com sucesso em: ${endpoint}`);
+                    console.log(`⏰ ${new Date().toLocaleString()}`);
+                    console.log('==================================\n');
+                    return true;
+                }
+            } catch (err) {
+                console.log(`❌ Falha ao conectar com ${endpoint}: ${err.message}`);
             }
-        } catch (err) {
-            console.log(`❌ Falha ao conectar com ${endpoint}: ${err.message}`);
         }
+        console.log('Nenhum endpoint disponível. Tentando novamente em 5 segundos...');
+        await new Promise(resolve => setTimeout(resolve, 5000));
     }
-    return false;
 }
 
 // Modificar o listen do app para usar a nova função de inicialização
