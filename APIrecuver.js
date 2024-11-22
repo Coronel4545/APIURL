@@ -5,7 +5,6 @@ const app = express();
 
 // Usar as variáveis de ambiente configuradas no Render
 const PORT = process.env.PORT || 3000;
-const WS_PORT = process.env.WS_PORT || 8080;
 
 // Configurar CORS
 app.use(cors({
@@ -17,9 +16,9 @@ app.use(cors({
 // Criar servidor HTTP
 const server = require('http').createServer(app);
 
-// Configurar WebSocket Server separado na porta WS_PORT
+// Remover a configuração separada do WebSocket
 const wss = new WebSocket.Server({ 
-    port: WS_PORT, // Usar a porta específica para WebSocket
+    server: server, // Anexar ao servidor HTTP
     perMessageDeflate: false,
     clientTracking: true,
     maxPayload: 50 * 1024 * 1024
@@ -61,22 +60,20 @@ app.get('/', (req, res) => {
     res.json({ 
         status: 'online',
         message: 'Servidor API está rodando',
-        httpPort: PORT,
-        wsPort: WS_PORT
+        httpPort: PORT
     });
 });
 
-// Iniciar servidores
+// Modificar a inicialização do servidor
 server.listen(PORT, () => {
     console.log('=================================');
-    console.log(`🚀 Servidor HTTP rodando na porta ${PORT}`);
-    console.log(`🔌 WebSocket rodando na porta ${WS_PORT}`);
+    console.log(`🚀 Servidor HTTP/WebSocket rodando na porta ${PORT}`);
     console.log('=================================');
 });
 
 // Verificar status do WebSocket Server
 wss.on('listening', () => {
-    console.log(`WebSocket Server está ouvindo na porta ${WS_PORT}`);
+    console.log(`WebSocket Server está ouvindo na porta ${PORT}`);
 });
 
 wss.on('error', (error) => {
